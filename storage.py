@@ -10,7 +10,7 @@ import imaplib
 #How long a chat remains iddle before it's archived to email.
 #Smaller values lead to producing many emails for a single chat,
 #larger values lead to longer archiving delay.
-IDLE_TIMEOUT_SECONDS = 60 
+IDLE_TIMEOUT_SECONDS = 60
 
 class MailArchiver(object):
     """
@@ -50,7 +50,7 @@ class MailArchiver(object):
                 now = datetime.now()
                 for chat_stamp, chat in self._chats.iteritems():
                     if len(chat) > 0 and\
-                            now - datetime.fromtimestamp(chat[-1].Timestamp) > timedelta(minutes=1):
+                            now - datetime.fromtimestamp(chat[-1].Timestamp) > timedelta(seconds=IDLE_TIMEOUT_SECONDS):
                         self.deliver_later(chat)
                         chat[:]=[]
             self.deliver_now()

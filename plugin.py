@@ -13,20 +13,20 @@ class Plugin(object):
     def __init__(self, archiver):
         self.archiver = archiver
         self.skype= Skype4Py.Skype()
-        self.skype.Attach();
-        self.skype.OnAttachmentStatus = self.on_attach;
-        self.skype.OnMessageStatus = self.on_message_status;
+        self.skype.OnAttachmentStatus = self.on_attach
+        self.skype.OnMessageStatus = self.on_message_status
+        self.skype.Attach()
 
-
-    def on_attach(status):
+    def on_attach(self, status):
         if status == Skype4Py.apiAttachAvailable:
             self.skype.Attach()
             
         if status == Skype4Py.apiAttachSuccess:
             pass
+            
 
 
-    def on_message_status(message, status):
+    def on_message_status(self, message, status):
         if status == 'SENT' or status == 'RECEIVED':
             self.archiver.add(message)
 
@@ -72,7 +72,9 @@ class OptionsDialog(QtGui.QDialog):
                                             self.ui.username_input.text(),
                                             self.ui.password_input.text())
         
+        global plugin
         plugin = Plugin(archiver)
+
 
 
     def cancel(self):
