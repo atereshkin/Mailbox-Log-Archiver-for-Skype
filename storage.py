@@ -7,6 +7,10 @@ import smtplib
 import string
 import imaplib
 
+import logging
+log = logging.getLogger('mlas')
+
+
 #How long a chat remains iddle before it's archived to email.
 #Smaller values lead to producing many emails for a single chat,
 #larger values lead to longer archiving delay.
@@ -58,11 +62,12 @@ class MailArchiver(object):
 
 
     def deliver_later(self, chat):
+        log.debug("Adding chat %s to delivery queue"%chat[0].Chat.FriendlyName)
         email_body = ''
         for msg in chat:
             email_body += "%s (%s): %s\n"%(msg.FromDisplayName, datetime.fromtimestamp(msg.Timestamp), msg.Body)
         email_subject = '[skype chat] "%s" (%s)'%(chat[0].Chat.FriendlyName, datetime.fromtimestamp(chat[0].Chat.Timestamp))
-        self._email_queue.append((email_subject,email_body))
+        self._email_queue.append((email_subject,email_body, chat[0].Chat.DialogPartner))
 
 
     def deliver_now(self):
@@ -142,10 +147,13 @@ class IMAPMailArchiver(MailArchiver):
         self.start()
         
     def deliver_now(self):
+        log.debug("deliver_now")
         if len(self._email_queue) == 0:
+            log.debug("Nothing to deliver")
             return
         for email in self._email_queue:
             body = string.join((
+                    "From: %s" % email[2],
                     "Subject: %s" % email[0],
                     "",
                     email[1]), "\r\n")

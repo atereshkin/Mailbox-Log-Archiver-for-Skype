@@ -1,5 +1,6 @@
 import sys
 import Skype4Py
+import time
 
 from PyQt4 import QtGui
 from PyQt4.QtCore import QObject, SIGNAL, QCoreApplication, QSettings, QVariant
@@ -8,6 +9,12 @@ from PyQt4.QtCore import QObject, SIGNAL, QCoreApplication, QSettings, QVariant
 import form
 import storage
 
+from log import _init_logging
+_init_logging(debug=True)
+
+import logging
+log = logging.getLogger('mlas')
+
 class Plugin(object):
     
     def __init__(self, archiver):
@@ -15,20 +22,34 @@ class Plugin(object):
         self.skype= Skype4Py.Skype()
         self.skype.OnAttachmentStatus = self.on_attach
         self.skype.OnMessageStatus = self.on_message_status
-        self.skype.Attach()
+        self.attach_unwearing()
 
     def on_attach(self, status):
         if status == Skype4Py.apiAttachAvailable:
-            self.skype.Attach()
+            log.debug("Skype API attach available")
+            self.attach_unwearing()
             
         if status == Skype4Py.apiAttachSuccess:
-            pass
+            log.debug("Skype API attached successfully")
             
-
+            
 
     def on_message_status(self, message, status):
         if status == 'SENT' or status == 'RECEIVED':
+            log.debug('Adding message')
             self.archiver.add(message)
+
+    def attach_unwearing(self):
+        connected = False
+        while not connected:
+            try:
+                log.debug("Trying to attach")
+                self.skype.Attach()
+                connected = True
+            except:
+                time.sleep(2)
+                connected = False
+        
 
 
 
@@ -80,6 +101,7 @@ class OptionsDialog(QtGui.QDialog):
     def cancel(self):
         app.quit()
 
+
 QCoreApplication.setOrganizationName("Y-NODE Software")
 QCoreApplication.setOrganizationDomain("y-node.com")
 QCoreApplication.setApplicationName("SkypeLogsLikeGTalk")
@@ -88,3 +110,4 @@ app = QtGui.QApplication(sys.argv)
 dialog = OptionsDialog()
 dialog.show()
 sys.exit(app.exec_())
+
