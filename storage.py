@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import smtplib
 import string
 import imaplib
+import select
 
 import logging
 log = logging.getLogger('mlas')
@@ -126,6 +127,7 @@ class SMTPMailArchiver(MailArchiver):
 
 
 IMAP_FOLDER_NAME = 'Skype chats'
+CHECK_CONNECTION_TIMEOUT = 10
 
 class IMAPMailArchiver(MailArchiver):
 
@@ -137,20 +139,54 @@ class IMAPMailArchiver(MailArchiver):
                  imap_password):
         super(IMAPMailArchiver, self).__init__()
 
-        if imap_use_tls:
-            self.imap = imaplib.IMAP4_SSL(imap_host, imap_port)
-        else:
-            self.imap = imaplib.IMAP4(imap_host, imap_port)
-        self.imap.login(imap_user, imap_password)
-        if not self.imap.list(IMAP_FOLDER_NAME)[1][0]:
-            self.imap.create(IMAP_FOLDER_NAME)
+        self.imap_host = imap_host
+        self.imap_port = imap_port
+        self.imap_use_tls = imap_use_tls
+        self.imap_user = imap_user
+        self.imap_password = imap_password
+        self.imap = None
+        self.connect()
         self.start()
+
+    
+    def connect(self):
+        log.debug("Connecting to IMAP server.")
+        if self.imap_use_tls:
+            self.imap = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
+        else:
+            self.imap = imaplib.IMAP4(self.imap_host, self.imap_port)
+        log.debug("Connected to IMAP server. Authenticating.")
+        self.imap.login(self.imap_user, self.imap_password)
+        log.debug("Successfully authenticated to mail server.")
+        if not self.imap.list(IMAP_FOLDER_NAME)[1][0]:
+            log.debug("Creating log folder on the server.")
+            self.imap.create(IMAP_FOLDER_NAME)
+        
+
+    def check_connection(self):
+        old_timeout = self.imap.socket().gettimeout()
+        self.imap.socket().settimeout(CHECK_CONNECTION_TIMEOUT)
+        try:
+            noop_result = self.imap.noop()
+            log.debug("noop: %r" % (noop_result,))
+            return noop_result[0] == 'OK'
+        except:
+            return False
+        finally:
+            log.debug('finally')
+            self.imap.socket().settimeout(old_timeout)
+        
+        
         
     def deliver_now(self):
         log.debug("deliver_now")
+        self.check_connection()
+        
+        
         if len(self._email_queue) == 0:
             log.debug("Nothing to deliver")
             return
+        
         for email in self._email_queue:
             body = string.join((
                     "From: %s" % email[2],
