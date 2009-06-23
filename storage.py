@@ -6,13 +6,13 @@ from datetime import datetime, timedelta
 import smtplib
 import string
 import imaplib
-import select
+import socket
 
 import logging
 log = logging.getLogger('mlas')
 
 
-#How long a chat remains iddle before it's archived to email.
+#How long a chat remains idle before it's archived to email.
 #Smaller values lead to producing many emails for a single chat,
 #larger values lead to longer archiving delay.
 IDLE_TIMEOUT_SECONDS = 60
@@ -63,11 +63,15 @@ class MailArchiver(object):
 
 
     def deliver_later(self, chat):
+        """
+        Add a chat to mail delivery queue.
+        """
         log.debug("Adding chat %s to delivery queue"%chat[0].Chat.FriendlyName)
         email_body = ''
         for msg in chat:
             email_body += "%s (%s): %s\n"%(msg.FromDisplayName, datetime.fromtimestamp(msg.Timestamp), msg.Body)
-        email_subject = '[skype chat] "%s" (%s)'%(chat[0].Chat.FriendlyName, datetime.fromtimestamp(chat[0].Chat.Timestamp))
+        email_subject = '[skype chat] "%s" (%s)'%(chat[0].Chat.FriendlyName, 
+                                                  datetime.fromtimestamp(chat[0].Chat.Timestamp))
         self._email_queue.append((email_subject,email_body, chat[0].Chat.DialogPartner))
 
 
@@ -127,7 +131,7 @@ class SMTPMailArchiver(MailArchiver):
 
 
 IMAP_FOLDER_NAME = 'Skype chats'
-CHECK_CONNECTION_TIMEOUT = 10
+CHECK_CONNECTION_TIMEOUT = 10 # Socket timout to use when checking IMAP connection.
 
 class IMAPMailArchiver(MailArchiver):
 
@@ -164,24 +168,25 @@ class IMAPMailArchiver(MailArchiver):
         
 
     def check_connection(self):
-        old_timeout = self.imap.socket().gettimeout()
-        self.imap.socket().settimeout(CHECK_CONNECTION_TIMEOUT)
+        """
+        Check if the connection to mail server is still active.
+        """
+        sock = self.imap.socket()
+        old_timeout = sock.gettimeout()
+        sock.settimeout(CHECK_CONNECTION_TIMEOUT)
         try:
             noop_result = self.imap.noop()
             log.debug("noop: %r" % (noop_result,))
             return noop_result[0] == 'OK'
-        except:
+        except socket.timeout:
             return False
         finally:
-            log.debug('finally')
-            self.imap.socket().settimeout(old_timeout)
-        
+            sock.settimeout(old_timeout)
         
         
     def deliver_now(self):
         log.debug("deliver_now")
         self.check_connection()
-        
         
         if len(self._email_queue) == 0:
             log.debug("Nothing to deliver")
@@ -193,5 +198,5 @@ class IMAPMailArchiver(MailArchiver):
                     "Subject: %s" % email[0],
                     "",
                     email[1]), "\r\n")
-            self.imap.append(IMAP_FOLDER_NAME, 'STORE', '"' + str(datetime.now()) + '"',body.encode('utf-8'))
+            self.imap.append(IMAP_FOLDER_NAME, 'STORE', '"' + str(datetime.now()) + '"', body.encode('utf-8'))
         self._email_queue = []
