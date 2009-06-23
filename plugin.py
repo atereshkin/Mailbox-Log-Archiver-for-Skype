@@ -31,7 +31,7 @@ class Plugin(object):
             
         if status == Skype4Py.apiAttachSuccess:
             log.debug("Skype API attached successfully")
-            
+            self.archive_all()
             
 
     def on_message_status(self, message, status):
@@ -50,6 +50,11 @@ class Plugin(object):
                 time.sleep(2)
                 connected = False
         
+
+    def archive_all(self):
+        for msg in self.skype.Messages():
+            self.archiver.add(msg)
+    
 
 
 

@@ -41,6 +41,7 @@ class MailArchiver(object):
         with self._lock:
             self._get_chat_data(message.Chat).append(message)
 
+
     
     def start(self):
         thread.start_new_thread(self._delivery_loop, ())
