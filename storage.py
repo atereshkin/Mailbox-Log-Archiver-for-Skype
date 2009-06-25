@@ -7,15 +7,35 @@ import smtplib
 import string
 import imaplib
 import socket
+import  user 
+import os.path
+import struct
 
 import logging
 log = logging.getLogger('mlas')
+
 
 
 #How long a chat remains idle before it's archived to email.
 #Smaller values lead to producing many emails for a single chat,
 #larger values lead to longer archiving delay.
 IDLE_TIMEOUT_SECONDS = 60
+
+
+class EmailMessage(object):
+    def __init__(self,
+                 from_,
+                 to,
+                 subject,
+                 timestamp,
+                 body):
+        self.from_ = from_
+        self.to = to
+        self.subject = subject
+        self.timestamp = timestamp
+        self.body = body
+        
+
 
 class MailArchiver(object):
     """
@@ -27,6 +47,17 @@ class MailArchiver(object):
         self._lock = thread.allocate_lock()
         self._stopped = False
         self._email_queue = []
+        self.persist_file = os.path.join(user.home, '.mlas_archived')
+        if os.path.exists(self.persist_file):
+            f = file(self.persist_file, 'rb')
+            data = f.read()
+            num_items = len(data)/4
+            self.delivered_msgs = set(struct.unpack('!%dL'%num_items, data))
+            f.close()
+        else:
+            self.delivered_msgs = set()
+        self.delivered_file=file(self.persist_file, 'wb')
+        
         
 
     def _get_chat_data(self, chat):
@@ -38,6 +69,11 @@ class MailArchiver(object):
         """
         Add a chat message to archive.
         """
+        if message.Id in self.delivered_msgs:
+            return
+        self.delivered_msgs.add(message.Id)
+        self.delivered_file.write(struct.pack('!L', message.Id))
+        self.delivered_file.flush()
         with self._lock:
             self._get_chat_data(message.Chat).append(message)
 
@@ -69,11 +105,17 @@ class MailArchiver(object):
         """
         log.debug("Adding chat %s to delivery queue"%chat[0].Chat.FriendlyName)
         email_body = ''
+        chat.sort(key=lambda msg : msg.Timestamp)
         for msg in chat:
             email_body += "%s (%s): %s\n"%(msg.FromDisplayName, datetime.fromtimestamp(msg.Timestamp), msg.Body)
-        email_subject = '[skype chat] "%s" (%s)'%(chat[0].Chat.FriendlyName, 
+        email_subject = '"%s" (%s)'%(chat[0].Chat.FriendlyName, 
                                                   datetime.fromtimestamp(chat[0].Chat.Timestamp))
-        self._email_queue.append((email_subject,email_body, chat[0].Chat.DialogPartner))
+        email = EmailMessage(from_=chat[0].Chat.DialogPartner, to=None, 
+                             subject=email_subject,
+                             timestamp=time.localtime(chat[-1].Timestamp),
+                             body=email_body)
+
+        self._email_queue.append(email)
 
 
     def deliver_now(self):
@@ -195,9 +237,10 @@ class IMAPMailArchiver(MailArchiver):
         
         for email in self._email_queue:
             body = string.join((
-                    "From: %s" % email[2],
-                    "Subject: %s" % email[0],
+                    "From: %s" % email.from_,
+                    "Subject: %s" % email.subject,
                     "",
-                    email[1]), "\r\n")
-            self.imap.append(IMAP_FOLDER_NAME, 'STORE', '"' + str(datetime.now()) + '"', body.encode('utf-8'))
+                    email.body), "\r\n")
+            log.debug("appending email with timestamp: %s"%str(email.timestamp))
+            self.imap.append(IMAP_FOLDER_NAME, '(\\Seen)', email.timestamp , body.encode('utf-8'))
         self._email_queue = []
