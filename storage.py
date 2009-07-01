@@ -39,12 +39,14 @@ class EmailMessage(object):
                  to,
                  subject,
                  timestamp,
-                 body):
+                 body,
+                 ids):
         self.from_ = from_
         self.to = to
         self.subject = subject
         self.timestamp = timestamp
         self.body = body
+        self.ids = ids
         
 
 
@@ -82,12 +84,13 @@ class MailArchiver(object):
         """
         if message.Id in self.delivered_msgs:
             return
-        self.delivered_msgs.add(message.Id)
-        self.delivered_file.write(struct.pack('!L', message.Id))
-        self.delivered_file.flush()
         with self._lock:
             self._get_chat_data(message.Chat).append(message)
 
+    def mark_added(self, message_id):
+        self.delivered_msgs.add(message_id)
+        self.delivered_file.write(struct.pack('!L', message_id))
+        self.delivered_file.flush()
 
     
     def start(self):
@@ -124,7 +127,8 @@ class MailArchiver(object):
         email = EmailMessage(from_=chat[0].Chat.DialogPartner, to=None, 
                              subject=email_subject,
                              timestamp=time.localtime(chat[-1].Timestamp),
-                             body=email_body)
+                             body=email_body,
+                             ids = [msg.Id for msg in chat])
 
         self._email_queue.append(email)
 
@@ -207,12 +211,20 @@ class IMAPMailArchiver(MailArchiver):
         self.start()
 
     
-    def connect(self):
-        log.debug("Connecting to IMAP server.")
-        if self.imap_use_tls:
-            self.imap = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
-        else:
-            self.imap = imaplib.IMAP4(self.imap_host, self.imap_port)
+    def connect(self, retry=True):
+        self.imap = None
+        while not self.imap:
+            log.debug("Connecting to IMAP server.")
+            try:
+                if self.imap_use_tls:
+                    self.imap = imaplib.IMAP4_SSL(self.imap_host, self.imap_port)
+                else:
+                    self.imap = imaplib.IMAP4(self.imap_host, self.imap_port)
+            except:
+                self.imap = None
+                if not retry:
+                    raise
+                time.sleep(10)
         log.debug("Connected to IMAP server. Authenticating.")
         self.imap.login(self.imap_user, self.imap_password)
         log.debug("Successfully authenticated to mail server.")
@@ -232,7 +244,7 @@ class IMAPMailArchiver(MailArchiver):
             noop_result = self.imap.noop()
             log.debug("noop: %r" % (noop_result,))
             return noop_result[0] == 'OK'
-        except socket.timeout:
+        except socket.error:
             return False
         finally:
             sock.settimeout(old_timeout)
@@ -240,7 +252,8 @@ class IMAPMailArchiver(MailArchiver):
         
     def deliver_now(self):
         log.debug("deliver_now")
-        self.check_connection()
+        if not self.check_connection():
+            self.connect()
         
         if len(self._email_queue) == 0:
             log.debug("Nothing to deliver")
@@ -254,4 +267,6 @@ class IMAPMailArchiver(MailArchiver):
                     email.body), "\r\n")
             log.debug("appending email with timestamp: %s"%str(email.timestamp))
             self.imap.append(IMAP_FOLDER_NAME, '(\\Seen)', email.timestamp , body.encode('utf-8'))
+            for id in email.ids:
+                self.mark_added(id)
         self._email_queue = []
