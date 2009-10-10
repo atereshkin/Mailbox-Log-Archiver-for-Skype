@@ -1,0 +1,11 @@
+Mailbox Log Archiver for Skype is a Skype plugin that allows storing Skype logs in any mailbox that supports IMAP protocol (for example, GMail). The advantages of this are:
+
+    * Global search across all your Skype logs and email (if your email client supports it).
+    * Central storage for logs (when using multiple machines)
+    * No need to store the logs locally, which could be less secure than a mailbox in some environments.
+
+The logs are stored in a separate mailbox folder called "Skype logs" a lot like GTalk logs in GMail.
+
+Mailbox Log Archiver for Skype is free software distributed under GNU General Public License v2.
+
+For binary downloads, visit http://mlas.y-node.com .
