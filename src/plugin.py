@@ -103,11 +103,11 @@ class OptionsDialog(QtGui.QDialog):
         
         self.save_settings()
 
-        archiver = storage.IMAPMailArchiver(self.ui.server_input.text(),
-                                            self.ui.port_input.value(),
+        archiver = storage.IMAPMailArchiver(str(self.ui.server_input.text()),
+                                            str(self.ui.port_input.value()),
                                             True,
-                                            self.ui.username_input.text(),
-                                            self.ui.password_input.text())
+                                            str(self.ui.username_input.text()),
+                                            str(self.ui.password_input.text()))
         
         global plugin
         plugin = Plugin(archiver)
